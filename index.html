@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tu IA Maxi</title>
+    
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { 
+            background: #121212; 
+            color: #e0e0e0; 
+            display: flex; 
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* --- PANEL LATERAL (Historial a la izquierda) --- */
+        #sidebar {
+            width: 260px;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+        }
+        .btn-nuevo {
+            background: #4dadf7;
+            color: #121212;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 15px;
+            cursor: pointer;
+            margin-bottom: 15px;
+            transition: 0.2s;
+        }
+        .btn-nuevo:active { background: #3a8cc7; }
+        
+        #lista-chats {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .item-chat {
+            padding: 12px;
+            background: #252525;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #ccc;
+            border-left: 3px solid transparent;
+        }
+        .item-chat:active { background: #333; }
+        .item-chat.activo {
+            background: #333;
+            border-left: 3px solid #4dadf7;
+            color: white;
+        }
+
+        .btn-borrar {
+            background: #cc3333;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        .btn-borrar:active { background: #aa2222; }
+        
+        /* --- ÁREA PRINCIPAL DEL CHAT (A la derecha) --- */
+        #main-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #121212;
+            position: relative;
+        }
+        header { background: #1f1f1f; padding: 15px; text-align: center; border-bottom: 1px solid #333; }
+        h1 { font-size: 20px; color: #4dadf7; }
+        
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-bottom: 80px; }
+        .message { max-width: 85%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 16px; white-space: pre-wrap; }
+        .user { background: #007bff; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .ai { background: #2a2a2a; color: #e0e0e0; align-self: flex-start; border-bottom-left-radius: 2px; }
+        
+        .input-area { 
+            position: absolute; bottom: 0; left: 0; right: 0;
+            padding: 15px; background: #1f1f1f; display: flex; gap: 10px; border-top: 1px solid #333; 
+        }
+        input { flex: 1; padding: 14px; border: none; border-radius: 25px; background: #2e2e2e; color: white; font-size: 16px; outline: none; }
+        .btn-enviar { background: #007bff; color: white; border: none; padding: 0 22px; border-radius: 25px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <button class="btn-nuevo" onclick="nuevoChat()">+ Nuevo Chat</button>
+        <div id="lista-chats"></div>
+        <button class="btn-borrar" onclick="borrarMemoria()">🗑️ Limpiar Todo</button>
+    </div>
+
+    <div id="main-chat">
+        <header>
+            <h1>Tu IA Maxi</h1>
+        </header>
+
+        <div id="chat-box"></div>
+
+        <div class="input-area">
+            <input type="text" id="userInput" placeholder="Pregúntame lo que sea, Max..." onkeydown="if(event.key === 'Enter') enviarMensaje()">
+            <button class="btn-enviar" onclick="enviarMensaje()">Enviar</button>
+        </div>
+    </div>
+
+    <script>
+        let chatIdActual = null;
+        let historial = {};
+
+        // Escudo anti-errores al leer la memoria
+        try {
+            let guardado = localStorage.getItem("maxi_memoria_chats");
+            if (guardado) historial = JSON.parse(guardado);
+        } catch (error) {
+            console.log("Modo seguro activado (Sin memoria local)");
+        }
+
+        const saludoInicial = "¡Hola! Soy Maxi. Estoy aquí para ayudarte a escribir código, responder tus dudas o platicar un rato. ¿En qué te puedo ayudar hoy?";
+
+        function iniciar() {
+            if (Object.keys(historial).length === 0) {
+                nuevoChat();
+            } else {
+                const ids = Object.keys(historial);
+                abrirChat(ids[ids.length - 1]);
+            }
+        }
+
+        function nuevoChat() {
+            chatIdActual = "chat_" + Date.now();
+            historial[chatIdActual] = [
+                { rol: "ai", texto: saludoInicial }
+            ];
+            guardarYRenderizar();
+            abrirChat(chatIdActual);
+        }
+
+        function abrirChat(id) {
+            if (!historial[id]) return;
+            chatIdActual = id;
+            const chatBox = document.getElementById("chat-box");
+            chatBox.innerHTML = "";
+            
+            historial[id].forEach(msg => {
+                const clase = msg.rol === "user" ? "user" : "ai";
+                chatBox.innerHTML += `<div class="message ${clase}">${msg.texto}</div>`;
+            });
+            chatBox.scrollTop = chatBox.scrollHeight;
+            renderizarListaChats();
+        }
+
+        // Función segura para guardar y no crashear TrebEdit
+        function guardarYRenderizar() {
+            try {
+                localStorage.setItem("maxi_memoria_chats", JSON.stringify(historial));
+            } catch (e) {
+                // Si TrebEdit bloquea el guardado, ignoramos el error para que la app no se congele
+            }
+            renderizarListaChats();
+        }
+
+        // Genera el nombre automático igual que ChatGPT/Gemini
+        function renderizarListaChats() {
+            const lista = document.getElementById("lista-chats");
+            lista.innerHTML = "";
+            
+            Object.keys(historial).reverse().forEach(id => {
+                let titulo = "Nuevo Chat";
+                
+                // Busca el primer mensaje que enviaste para ponerle el título
+                const primerMensajeUsuario = historial[id].find(m => m.rol === "user");
+                if (primerMensajeUsuario) {
+                    titulo = primerMensajeUsuario.texto.substring(0, 24);
+                    if (primerMensajeUsuario.texto.length > 24) titulo += "...";
+                }
+
+                let claseActivo = (id === chatIdActual) ? " activo" : "";
+                lista.innerHTML += `<div class="item-chat${claseActivo}" onclick="abrirChat('${id}')">💬 ${titulo}</div>`;
+            });
+        }
+
+        function borrarMemoria() {
+            if (confirm("¿Borrar todos los chats?")) {
+                try { localStorage.removeItem("maxi_memoria_chats"); } catch(e) {}
+                historial = {};
+                nuevoChat();
+            }
+        }
+
+        async function enviarMensaje() {
+            const input = document.getElementById('userInput');
+            const chatBox = document.getElementById('chat-box');
+            const texto = input.value.trim();
+
+            if (!texto) return;
+
+            // Guardar el mensaje del usuario
+            historial[chatIdActual].push({ rol: "user", texto: texto });
+            chatBox.innerHTML += `<div class="message user">${texto}</div>`;
+            input.value = '';
+            
+            // Refrescar para que el título del chat se actualice al instante
+            guardarYRenderizar(); 
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            const idPensando = "pensando-" + Date.now();
+            chatBox.innerHTML += `<div class="message ai" id="${idPensando}">Pensando... 🤔</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                let contextoParaAPI = [
+                    { role: "system", content: "Tu nombre es Maxi. Eres un asistente virtual creado por Max. Responde en español de forma amigable, directa y concisa. NUNCA digas que eres ChatGPT o GPT-4. Solo eres Maxi." }
+                ];
+                
+                historial[chatIdActual].slice(-6).forEach(msg => {
+                    contextoParaAPI.push({
+                        role: msg.rol === "user" ? "user" : "assistant",
+                        content: msg.texto
+                    });
+                });
+
+                const respuesta = await fetch("https://text.pollinations.ai/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ messages: contextoParaAPI, private: true })
+                });
+
+                const textoIA = await respuesta.text();
+                
+                document.getElementById(idPensando).innerText = textoIA;
+                document.getElementById(idPensando).removeAttribute('id');
+                
+                historial[chatIdActual].push({ rol: "ai", texto: textoIA });
+                guardarYRenderizar();
+
+            } catch (error) {
+                document.getElementById(idPensando).innerText = "Error de red. Intenta de nuevo, Max.";
+            }
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        iniciar();
+    </script>
+</body>
+</html>
